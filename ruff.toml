@@ -33,6 +33,9 @@ ignore = [
     "INP001", # Implicit namespace package
     "T20",    # print found
 ]
+"scratch_space/*" = [
+    "INP001", # Implicit namespace package
+]
 
 [lint.pylint]
 max-args = 10
