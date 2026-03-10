@@ -11,9 +11,10 @@ is used to load different paths and other parameters based on the environment.
 from loguru import logger as lg
 
 from tg_central_hub_bot.metaclasses.singleton import Singleton
+from tg_central_hub_bot.params.bot_params import BotParams
 from tg_central_hub_bot.params.env_type import EnvType
-from tg_central_hub_bot.params.tg_central_hub_bot_paths import TgCentralHubBotPaths
 from tg_central_hub_bot.params.sample_params import SampleParams
+from tg_central_hub_bot.params.tg_central_hub_bot_paths import TgCentralHubBotPaths
 from tg_central_hub_bot.params.webapp import WebappParams
 
 
@@ -47,6 +48,7 @@ class TgCentralHubBotParams(metaclass=Singleton):
             stage=self.env_type.stage,
             location=self.env_type.location,
         )
+        self.bot = BotParams(env_type=self.env_type)
 
     def __str__(self) -> str:
         """Return the string representation of the object."""
@@ -54,6 +56,7 @@ class TgCentralHubBotParams(metaclass=Singleton):
         s += f"\n{self.paths}"
         s += f"\n{self.sample}"
         s += f"\n{self.webapp}"
+        s += f"\n{self.bot}"
         return s
 
     def __repr__(self) -> str:
@@ -74,3 +77,8 @@ def get_tg_central_hub_bot_paths() -> TgCentralHubBotPaths:
 def get_webapp_params() -> WebappParams:
     """Get the webapp params."""
     return get_tg_central_hub_bot_params().webapp
+
+
+def get_bot_params() -> BotParams:
+    """Get the bot params."""
+    return get_tg_central_hub_bot_params().bot
