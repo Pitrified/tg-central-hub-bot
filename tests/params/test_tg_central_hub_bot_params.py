@@ -1,9 +1,11 @@
 """Test the TgCentralHubBotParams class."""
 
-from tg_central_hub_bot.params.tg_central_hub_bot_params import TgCentralHubBotParams
-from tg_central_hub_bot.params.tg_central_hub_bot_params import get_tg_central_hub_bot_params
-from tg_central_hub_bot.params.tg_central_hub_bot_paths import TgCentralHubBotPaths
 from tg_central_hub_bot.params.sample_params import SampleParams
+from tg_central_hub_bot.params.tg_central_hub_bot_params import TgCentralHubBotParams
+from tg_central_hub_bot.params.tg_central_hub_bot_params import (
+    get_tg_central_hub_bot_params,
+)
+from tg_central_hub_bot.params.tg_central_hub_bot_paths import TgCentralHubBotPaths
 
 
 def test_tg_central_hub_bot_params_singleton() -> None:

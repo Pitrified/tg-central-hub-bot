@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING
 
 from starlette.templating import Jinja2Templates
 
-from tg_central_hub_bot.params.tg_central_hub_bot_params import get_tg_central_hub_bot_paths
+from tg_central_hub_bot.params.tg_central_hub_bot_params import (
+    get_tg_central_hub_bot_paths,
+)
 
 if TYPE_CHECKING:
     from tg_central_hub_bot.config.webapp import WebappConfig

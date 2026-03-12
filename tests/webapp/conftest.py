@@ -113,7 +113,9 @@ def authenticated_client(
 @pytest.fixture
 def mock_google_oauth() -> Generator[MagicMock]:
     """Mock Google OAuth HTTP calls."""
-    with patch("tg_central_hub_bot.webapp.services.auth_service.httpx.AsyncClient") as mock:
+    with patch(
+        "tg_central_hub_bot.webapp.services.auth_service.httpx.AsyncClient"
+    ) as mock:
         mock_client = AsyncMock()
         mock.return_value.__aenter__.return_value = mock_client
 

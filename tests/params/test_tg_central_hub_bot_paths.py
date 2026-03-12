@@ -1,6 +1,8 @@
 """Test the tg_central_hub_bot paths."""
 
-from tg_central_hub_bot.params.tg_central_hub_bot_params import get_tg_central_hub_bot_paths
+from tg_central_hub_bot.params.tg_central_hub_bot_params import (
+    get_tg_central_hub_bot_paths,
+)
 
 
 def test_tg_central_hub_bot_paths() -> None:

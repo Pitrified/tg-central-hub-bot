@@ -19,7 +19,9 @@ from loguru import logger as lg
 from starlette.staticfiles import StaticFiles
 
 from tg_central_hub_bot.config.webapp import WebappConfig
-from tg_central_hub_bot.params.tg_central_hub_bot_params import get_tg_central_hub_bot_paths
+from tg_central_hub_bot.params.tg_central_hub_bot_params import (
+    get_tg_central_hub_bot_paths,
+)
 from tg_central_hub_bot.params.tg_central_hub_bot_params import get_webapp_params
 from tg_central_hub_bot.webapp.api.v1 import api_router
 from tg_central_hub_bot.webapp.core.exceptions import NotAuthenticatedException
