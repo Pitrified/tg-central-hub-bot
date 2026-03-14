@@ -19,6 +19,7 @@ from tg_central_hub_bot.webapp.schemas.auth_schemas import LogoutResponse
 from tg_central_hub_bot.webapp.schemas.auth_schemas import SessionData
 from tg_central_hub_bot.webapp.schemas.auth_schemas import UserResponse
 from tg_central_hub_bot.webapp.services.auth_service import GoogleAuthService
+from tg_central_hub_bot.webapp.utils.url_utils import get_public_base_url
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -42,6 +43,7 @@ def get_auth_service(request: Request) -> GoogleAuthService:
     description="Returns the Google OAuth authorization URL for login.",
 )
 async def google_login(
+    request: Request,
     auth_service: Annotated[GoogleAuthService, Depends(get_auth_service)],
     *,
     redirect: Annotated[
@@ -52,13 +54,18 @@ async def google_login(
     """Initiate Google OAuth login flow.
 
     Args:
+        request: Incoming request.
         auth_service: Authentication service.
         redirect: Whether to redirect or return URL.
 
     Returns:
         Redirect to Google or AuthURLResponse with URL.
     """
-    auth_url, state = auth_service.get_authorization_url()
+    settings = get_settings()
+    redirect_uri = (
+        get_public_base_url(request, settings.public_base_url) + "/auth/google/callback"
+    )
+    auth_url, state = auth_service.get_authorization_url(redirect_uri=redirect_uri)
 
     if redirect:
         return RedirectResponse(url=auth_url, status_code=302)
@@ -72,6 +79,7 @@ async def google_login(
     description="Handles the OAuth callback from Google after user authorization.",
 )
 async def google_callback(
+    request: Request,
     auth_service: Annotated[GoogleAuthService, Depends(get_auth_service)],
     code: Annotated[str, Query(description="Authorization code from Google")],
     state: Annotated[str, Query(description="State parameter for CSRF protection")],
@@ -80,6 +88,7 @@ async def google_callback(
     """Handle Google OAuth callback.
 
     Args:
+        request: Incoming request.
         auth_service: Authentication service.
         code: Authorization code from Google.
         state: State parameter for CSRF validation.
@@ -94,8 +103,17 @@ async def google_callback(
         return RedirectResponse(url=f"/?error={error}", status_code=302)
 
     try:
-        # Complete authentication
-        session = await auth_service.authenticate(code, state)
+        # Complete authentication - pass the same redirect_uri used at login
+        settings = get_settings()
+        redirect_uri = (
+            get_public_base_url(request, settings.public_base_url)
+            + "/auth/google/callback"
+        )
+        session = await auth_service.authenticate(
+            code,
+            state,
+            redirect_uri=redirect_uri,
+        )
 
         # Get session config for cookie settings
         settings = get_settings()

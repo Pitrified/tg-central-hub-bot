@@ -141,8 +141,13 @@ class GoogleAuthService:
         self.session_config = session_config
         self.session_store = session_store
 
-    def get_authorization_url(self) -> tuple[str, str]:
+    def get_authorization_url(self, redirect_uri: str | None = None) -> tuple[str, str]:
         """Generate Google OAuth authorization URL.
+
+        Args:
+            redirect_uri: OAuth redirect URI. Falls back to the configured
+                value if not provided (useful for Cloudflare Tunnel deployments
+                where the public URL is derived from request headers at runtime).
 
         Returns:
             Tuple of (authorization_url, state_token).
@@ -152,7 +157,7 @@ class GoogleAuthService:
 
         params = {
             "client_id": self.oauth_config.client_id,
-            "redirect_uri": self.oauth_config.redirect_uri,
+            "redirect_uri": redirect_uri or self.oauth_config.redirect_uri,
             "response_type": "code",
             "scope": " ".join(self.oauth_config.scopes),
             "state": state,
@@ -174,11 +179,17 @@ class GoogleAuthService:
         """
         return self.session_store.validate_state_token(state)
 
-    async def exchange_code_for_tokens(self, code: str) -> dict:
+    async def exchange_code_for_tokens(
+        self,
+        code: str,
+        redirect_uri: str | None = None,
+    ) -> dict:
         """Exchange authorization code for tokens.
 
         Args:
             code: Authorization code from Google.
+            redirect_uri: OAuth redirect URI used when the login was initiated.
+                Falls back to the configured value if not provided.
 
         Returns:
             Token response dictionary.
@@ -191,7 +202,7 @@ class GoogleAuthService:
             "client_secret": self.oauth_config.client_secret,
             "code": code,
             "grant_type": "authorization_code",
-            "redirect_uri": self.oauth_config.redirect_uri,
+            "redirect_uri": redirect_uri or self.oauth_config.redirect_uri,
         }
 
         async with httpx.AsyncClient() as client:
@@ -219,12 +230,20 @@ class GoogleAuthService:
             response.raise_for_status()
             return GoogleUserInfo(**response.json())
 
-    async def authenticate(self, code: str, state: str) -> SessionData:
+    async def authenticate(
+        self,
+        code: str,
+        state: str,
+        redirect_uri: str | None = None,
+    ) -> SessionData:
         """Complete authentication flow.
 
         Args:
             code: Authorization code from Google.
             state: State parameter for CSRF validation.
+            redirect_uri: OAuth redirect URI used when the login was initiated.
+                Must match exactly the URI passed to ``get_authorization_url``.
+                Falls back to the configured value if not provided.
 
         Returns:
             SessionData for the authenticated user.
@@ -239,7 +258,7 @@ class GoogleAuthService:
             raise ValueError(msg)
 
         # Exchange code for tokens
-        tokens = await self.exchange_code_for_tokens(code)
+        tokens = await self.exchange_code_for_tokens(code, redirect_uri=redirect_uri)
         access_token = tokens["access_token"]
 
         # Get user info

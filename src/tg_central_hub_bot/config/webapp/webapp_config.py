@@ -120,6 +120,21 @@ class WebappConfig(BaseModelKwargs):
         default="0.1.0",
         description="Application version",
     )
+    trusted_hosts: list[str] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1"],
+        description=(
+            "Allowed Host header values for TrustedHostMiddleware. "
+            "Include the public domain when running behind a reverse proxy."
+        ),
+    )
+    public_base_url: str | None = Field(
+        default=None,
+        description=(
+            "Explicit public base URL (e.g. https://yourdomain.com). "
+            "Used to build OAuth redirect URIs behind Cloudflare Tunnel. "
+            "If None, the base URL is inferred from X-Forwarded-* request headers."
+        ),
+    )
     cors: CORSConfig = Field(
         default_factory=CORSConfig,
         description="CORS configuration",

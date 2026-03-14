@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.openapi.docs import get_redoc_html
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.docs import get_swagger_ui_oauth2_redirect_html
@@ -17,6 +18,7 @@ from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 from loguru import logger as lg
 from starlette.staticfiles import StaticFiles
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from tg_central_hub_bot.config.sample_app_config import SampleAppConfig
 from tg_central_hub_bot.config.webapp import WebappConfig
@@ -148,6 +150,22 @@ def create_app(
 
     # Setup custom middleware
     setup_middleware(app, config)
+
+    # Protect against Host header injection. In debug/dev mode all hosts are
+    # allowed so the test client (host=testserver) and local dev work without
+    # extra configuration.
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=["*"] if config.debug else config.trusted_hosts,
+    )
+
+    # Trust X-Forwarded-Proto / X-Forwarded-Host headers only from the local
+    # cloudflared process (127.0.0.1 / ::1). External callers cannot spoof
+    # these because they cannot originate requests from those addresses.
+    app.add_middleware(
+        ProxyHeadersMiddleware,
+        trusted_hosts=["127.0.0.1", "::1"],
+    )
 
     # Register exception handlers
     register_exception_handlers(app)

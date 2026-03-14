@@ -80,6 +80,24 @@ class WebappParams:
             os.getenv("GOOGLE_REDIRECT_URI") or self._get_default_redirect_uri()
         )
 
+        # Proxy / tunnel settings
+        trusted_hosts_str = os.getenv("TRUSTED_HOSTS", "")
+        self.trusted_hosts: list[str] = (
+            [h.strip() for h in trusted_hosts_str.split(",") if h.strip()]
+            if trusted_hosts_str
+            else ["localhost", "127.0.0.1"]
+        )
+        self.public_base_url: str | None = os.getenv("PUBLIC_BASE_URL") or None
+
+        # If PUBLIC_BASE_URL is set, make sure its hostname is trusted so
+        # TrustedHostMiddleware does not reject Cloudflare Tunnel requests.
+        if self.public_base_url:
+            from urllib.parse import urlparse  # noqa: PLC0415
+
+            hostname = urlparse(self.public_base_url).hostname
+            if hostname and hostname not in self.trusted_hosts:
+                self.trusted_hosts = [*self.trusted_hosts, hostname]
+
         # Apply environment-specific overrides
         self._apply_overrides()
 
@@ -146,6 +164,8 @@ class WebappParams:
                 burst_size=self.rate_limit_burst_size,
                 auth_requests_per_minute=self.rate_limit_auth_requests_per_minute,
             ),
+            trusted_hosts=self.trusted_hosts,
+            public_base_url=self.public_base_url,
             google_oauth=GoogleOAuthConfig(
                 client_id=self.google_client_id,
                 client_secret=self.google_client_secret,
