@@ -18,6 +18,7 @@ from fastapi.responses import RedirectResponse
 from loguru import logger as lg
 from starlette.staticfiles import StaticFiles
 
+from tg_central_hub_bot.config.sample_app_config import SampleAppConfig
 from tg_central_hub_bot.config.webapp import WebappConfig
 from tg_central_hub_bot.params.tg_central_hub_bot_params import (
     get_tg_central_hub_bot_paths,
@@ -35,6 +36,7 @@ from tg_central_hub_bot.webapp.routers import pages_router
 from tg_central_hub_bot.webapp.schemas.common_schemas import ErrorResponse
 from tg_central_hub_bot.webapp.services.auth_service import GoogleAuthService
 from tg_central_hub_bot.webapp.services.auth_service import SessionStore
+from tg_central_hub_bot.webapp.services.entries_service import EntriesService
 
 
 @asynccontextmanager
@@ -65,6 +67,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     app.state.auth_service = auth_service
 
+    # Initialize entries service if sample app is configured
+    sample_config: SampleAppConfig | None = getattr(
+        app.state, "sample_app_config", None
+    )
+    if sample_config is not None:
+        entries_service = EntriesService(db_path=sample_config.db_path)
+        await entries_service.init_db()
+        app.state.entries_service = entries_service
+
     lg.info("Webapp started successfully")
 
     yield
@@ -75,11 +86,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     lg.info("Webapp shutdown complete")
 
 
-def create_app(config: WebappConfig | None = None) -> FastAPI:
+def create_app(
+    config: WebappConfig | None = None,
+    sample_app_config: SampleAppConfig | None = None,
+) -> FastAPI:
     """Create and configure FastAPI application.
 
     Args:
         config: Webapp configuration. If None, loads from environment.
+        sample_app_config: Sample app configuration for the entries feature.
+            If None, the entries service is not initialized.
 
     Returns:
         Configured FastAPI application instance.
@@ -106,8 +122,9 @@ def create_app(config: WebappConfig | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Store config in app state
+    # Store config and optional sample app config in app state
     app.state.config = config
+    app.state.sample_app_config = sample_app_config
 
     # Configure Jinja2 template globals
     configure_templates(config)

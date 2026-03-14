@@ -301,3 +301,146 @@ Yes, the bot works without `run_polling()`. In webhook mode you run PTB using `a
 **Does the webhook fire when the bot process is not running?**
 
 No. If the bot process is down, Telegram sends the POST to the webhook URL and gets a non-2xx response (connection refused, 502, etc.). Telegram will retry a fixed number of times with exponential backoff. If retries are exhausted, that update is dropped. Telegram does NOT queue updates indefinitely for a webhook - it queues them briefly while retrying, then discards them. This is the main operational difference: polling picks up queued updates whenever the bot restarts; a webhook that was down long enough will lose updates. For the sample app this is acceptable, but it is worth knowing.
+
+## Final implementation recap
+
+### Files created
+
+| Path | Description |
+|---|---|
+| `src/tg_central_hub_bot/config/sample_app_config.py` | `SampleAppConfig(BaseModelKwargs)` - `db_path: Path`, `bot_api_key: SecretStr` |
+| `src/tg_central_hub_bot/params/sample_app_params.py` | `SampleAppParams` - reads `BOT_API_KEY` / `SAMPLE_DB_PATH` from env; raises `MissingBotApiKeyError` |
+| `src/tg_central_hub_bot/webapp/core/bot_auth.py` | `verify_bot_api_key` FastAPI dependency; constant-time `hmac.compare_digest` comparison |
+| `src/tg_central_hub_bot/webapp/internal/__init__.py` | Internal package init |
+| `src/tg_central_hub_bot/webapp/internal/entries_router.py` | `POST /internal/entries` - bot auth protected; 201 on success |
+| `src/tg_central_hub_bot/webapp/backend_app.py` | `create_backend_app()` factory; `backend_app` entry point for uvicorn on `127.0.0.1:8001` |
+| `src/tg_central_hub_bot/webapp/api/v1/entries_router.py` | `GET /api/v1/entries/` - OAuth protected; returns `list[EntryRead]` for HTMX |
+| `src/tg_central_hub_bot/webapp/schemas/entry_schemas.py` | `EntryCreate`, `EntryRead` Pydantic models |
+| `src/tg_central_hub_bot/webapp/services/entries_service.py` | `EntriesService` - async SQLite CRUD via `asyncio.to_thread`; parameterised statements |
+| `templates/pages/entries.html` | Full page - HTMX polls `/pages/partials/entries-table` every 5 s |
+| `templates/partials/entries_table.html` | Bulma table fragment swapped by HTMX |
+| `scratch_space/feature_sample/sample_bot.py` | PTB bot - `/start`, `/add <text>`; calls backend via httpx with Bearer auth |
+| `tests/config/test_sample_app_config.py` | Config model tests |
+| `tests/params/test_sample_app_params.py` | Params loading, error, masking tests |
+| `tests/webapp/test_bot_auth.py` | Bot auth dependency: valid key, wrong key, missing header, empty body |
+| `tests/webapp/test_entries_service.py` | SQLite CRUD: create, list (newest first), empty DB |
+
+### Files modified
+
+| Path | Change |
+|---|---|
+| `src/tg_central_hub_bot/params/tg_central_hub_bot_params.py` | Added `os` import; wired `SampleAppParams` as optional `sample_app` attribute; added `get_sample_app_params()` accessor |
+| `src/tg_central_hub_bot/webapp/api/v1/api_router.py` | Included `entries_router` under `/api/v1/entries` |
+| `src/tg_central_hub_bot/webapp/main.py` | Added `SampleAppConfig` import and `EntriesService`; extended `create_app()` signature with `sample_app_config` kwarg; extended lifespan to init `EntriesService` when configured |
+| `src/tg_central_hub_bot/webapp/app.py` | Reads `sample_app` from params singleton and passes config to `create_app()` |
+| `src/tg_central_hub_bot/webapp/routers/pages_router.py` | Added `GET /entries` page route and `GET /pages/partials/entries-table` partial route |
+
+### Key design decisions
+
+- `SampleAppParams` is **optional** in the singleton - only instantiated when `BOT_API_KEY` is present. The rest of the app works unchanged without it.
+- `EntriesService` uses `asyncio.to_thread` over stdlib `sqlite3` - no extra dependency, no blocking of the event loop.
+- The backend app (`backend_app.py`) is a **separate process** bound to `127.0.0.1:8001`. It never appears in the Cloudflare tunnel ingress config.
+- The frontend app reads entries via the same `EntriesService` instance; when `sample_app_config` is not supplied to `create_app()` the service is simply absent and the HTMX partial returns an empty table gracefully.
+
+---
+
+## Manual testing steps
+
+### Prerequisites
+
+1. Add to `~/cred/tg-central-hub-bot/.env`:
+   ```
+   BOT_API_KEY=<output of `python -c "import secrets; print(secrets.token_hex(32))"`>
+   SAMPLE_DB_PATH=data/sample.db
+   ```
+2. Ensure `BOT_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` are also set.
+
+### 1 - Unit tests (no external services needed)
+
+```bash
+BOT_TOKEN=fake uv run pytest tests/config/test_sample_app_config.py \
+  tests/params/test_sample_app_params.py \
+  tests/webapp/test_bot_auth.py \
+  tests/webapp/test_entries_service.py -v
+# Expected: all pass
+```
+
+### 2 - Start the backend service
+
+```bash
+source ~/cred/tg-central-hub-bot/.env
+uv run uvicorn tg_central_hub_bot.webapp.backend_app:backend_app \
+  --host 127.0.0.1 --port 8001
+```
+
+### 3 - Verify the bot auth endpoint directly
+
+```bash
+# Should create an entry (201)
+curl -s -X POST http://127.0.0.1:8001/internal/entries \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $BOT_API_KEY" \
+  -d '{"text": "manual test entry"}' | python -m json.tool
+
+# Should return 403
+curl -s -o /dev/null -w "%{http_code}" \
+  -X POST http://127.0.0.1:8001/internal/entries \
+  -H "Authorization: Bearer wrongkey" \
+  -d '{"text": "bad auth"}'
+# Expected: 403
+
+# Should return 401 (no auth header)
+curl -s -o /dev/null -w "%{http_code}" \
+  -X POST http://127.0.0.1:8001/internal/entries \
+  -d '{"text": "no auth"}'
+# Expected: 401
+```
+
+### 4 - Start the frontend webapp
+
+```bash
+source ~/cred/tg-central-hub-bot/.env
+uv run uvicorn tg_central_hub_bot.webapp.app:app \
+  --host 0.0.0.0 --port 8000
+```
+
+<!-- source ~/cred/tg-central-hub-bot/.env && uv run uvicorn tg_central_hub_bot.webapp.app:app --host 0.0.0.0 --port 8000 -->
+
+### 5 - Visit the entries page in a browser
+
+1. Navigate to `http://localhost:8000` and complete Google login.
+2. Navigate to `http://localhost:8000/entries`.
+3. The page loads and renders existing entries (or "No entries yet" if empty).
+4. The table auto-refreshes every 5 seconds via HTMX.
+
+### 6 - Run the sample bot and test end-to-end
+
+```bash
+source ~/cred/tg-central-hub-bot/.env
+uv run python scratch_space/feature_sample/sample_bot.py
+```
+
+<!-- source ~/cred/tg-central-hub-bot/.env && uv run python scratch_space/feature_sample/sample_bot.py -->
+
+In Telegram:
+- Send `/start` - bot replies with welcome message.
+- Send `/add hello from bot` - bot replies "Saved entry #N: hello from bot".
+- Refresh `http://localhost:8000/entries` - the new entry appears (or wait 5 s for HTMX poll).
+
+### 7 - Verify backend is not reachable from outside loopback
+
+```bash
+# From another machine on the same LAN (replace 192.168.x.x with box IP):
+curl -s -o /dev/null -w "%{http_code}" \
+  http://192.168.x.x:8001/internal/entries
+# Expected: connection refused (port only bound to 127.0.0.1)
+```
+
+### 8 - Run full verification suite
+
+```bash
+BOT_TOKEN=fake uv run pytest && uv run ruff check . && uv run pyright
+# New test failures: none
+# Pre-existing failures (static assets not present): 8 in tests/webapp/test_pages.py
+```
+

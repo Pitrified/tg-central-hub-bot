@@ -8,11 +8,15 @@ There is a parameter regarding the environment type (stage and location), which
 is used to load different paths and other parameters based on the environment.
 """
 
+import os
+
 from loguru import logger as lg
 
 from tg_central_hub_bot.metaclasses.singleton import Singleton
 from tg_central_hub_bot.params.bot_params import BotParams
 from tg_central_hub_bot.params.env_type import EnvType
+from tg_central_hub_bot.params.sample_app_params import MissingBotApiKeyError
+from tg_central_hub_bot.params.sample_app_params import SampleAppParams
 from tg_central_hub_bot.params.sample_params import SampleParams
 from tg_central_hub_bot.params.tg_central_hub_bot_paths import TgCentralHubBotPaths
 from tg_central_hub_bot.params.webapp import WebappParams
@@ -49,6 +53,14 @@ class TgCentralHubBotParams(metaclass=Singleton):
             location=self.env_type.location,
         )
         self.bot = BotParams(env_type=self.env_type)
+        # SampleAppParams is optional - only loaded when BOT_API_KEY is set
+        if os.getenv("BOT_API_KEY"):
+            self.sample_app: SampleAppParams | None = SampleAppParams(
+                env_type=self.env_type,
+            )
+        else:
+            lg.debug("BOT_API_KEY not set; sample app features are disabled")
+            self.sample_app = None
 
     def __str__(self) -> str:
         """Return the string representation of the object."""
@@ -57,6 +69,8 @@ class TgCentralHubBotParams(metaclass=Singleton):
         s += f"\n{self.sample}"
         s += f"\n{self.webapp}"
         s += f"\n{self.bot}"
+        if self.sample_app is not None:
+            s += f"\n{self.sample_app}"
         return s
 
     def __repr__(self) -> str:
@@ -82,3 +96,16 @@ def get_webapp_params() -> WebappParams:
 def get_bot_params() -> BotParams:
     """Get the bot params."""
     return get_tg_central_hub_bot_params().bot
+
+
+def get_sample_app_params() -> SampleAppParams:
+    """Get the sample app params.
+
+    Raises:
+        MissingBotApiKeyError: If BOT_API_KEY is not set.
+    """
+    params = get_tg_central_hub_bot_params().sample_app
+    if params is None:
+        msg = "BOT_API_KEY is not set; SampleAppParams is not available"
+        raise MissingBotApiKeyError(msg)
+    return params

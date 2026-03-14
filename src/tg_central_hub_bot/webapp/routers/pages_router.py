@@ -16,6 +16,7 @@ from tg_central_hub_bot.webapp.core.dependencies import get_current_user
 from tg_central_hub_bot.webapp.core.dependencies import get_optional_user
 from tg_central_hub_bot.webapp.core.templating import templates
 from tg_central_hub_bot.webapp.schemas.auth_schemas import SessionData
+from tg_central_hub_bot.webapp.services.entries_service import EntriesService
 
 # Map OAuth error codes to user-friendly messages
 _ERROR_MESSAGES: dict[str, str] = {
@@ -150,3 +151,57 @@ async def error_page(
         },
         status_code=status_code,
     )
+
+
+def _get_optional_entries_service(request: Request) -> EntriesService | None:
+    return getattr(request.app.state, "entries_service", None)
+
+
+@router.get("/entries", response_class=HTMLResponse, include_in_schema=False)
+async def entries_page(
+    request: Request,
+    user: Annotated[SessionData, Depends(get_current_user)],
+) -> HTMLResponse:
+    """Render the entries list page (authentication required).
+
+    Args:
+        request: Incoming request.
+        user: Authenticated user session.
+
+    Returns:
+        Entries page HTML.
+    """
+    return templates.TemplateResponse(
+        request,
+        "pages/entries.html",
+        {"user": user, "active_page": "entries"},
+    )
+
+
+@router.get(
+    "/pages/partials/entries-table",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def entries_table_partial(
+    request: Request,
+    user: Annotated[SessionData, Depends(get_current_user)],
+    service: Annotated[EntriesService | None, Depends(_get_optional_entries_service)],
+) -> HTMLResponse:
+    """Return the entries table HTML fragment for HTMX polling.
+
+    Args:
+        request: Incoming request.
+        user: Authenticated user session.
+        service: EntriesService from app state (may be None).
+
+    Returns:
+        Entries table partial HTML.
+    """
+    entries = await service.list_entries() if service is not None else []
+    return templates.TemplateResponse(
+        request,
+        "partials/entries_table.html",
+        {"user": user, "entries": entries},
+    )
+

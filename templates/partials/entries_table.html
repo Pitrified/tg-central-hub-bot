@@ -1,0 +1,22 @@
+{% if entries %}
+<table class="table is-fullwidth is-striped is-hoverable">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Text</th>
+      <th>Created at</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for entry in entries %}
+    <tr>
+      <td>{{ entry.id }}</td>
+      <td>{{ entry.text }}</td>
+      <td>{{ entry.created_at.strftime("%Y-%m-%d %H:%M:%S UTC") }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="has-text-grey">No entries yet. Send <code>/add &lt;text&gt;</code> to the bot.</p>
+{% endif %}

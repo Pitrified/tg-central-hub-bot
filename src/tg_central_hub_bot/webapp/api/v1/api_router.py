@@ -5,11 +5,13 @@ from typing import Annotated
 from fastapi import APIRouter
 from fastapi import Depends
 
+from tg_central_hub_bot.webapp.api.v1.entries_router import router as entries_router
 from tg_central_hub_bot.webapp.core.dependencies import get_current_user
 from tg_central_hub_bot.webapp.schemas.auth_schemas import SessionData
 from tg_central_hub_bot.webapp.schemas.common_schemas import MessageResponse
 
 router = APIRouter(prefix="/api/v1", tags=["api-v1"])
+router.include_router(entries_router)
 
 
 @router.get(

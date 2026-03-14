@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Entries – {{ app_name }}{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <h1 class="title is-3">Entries</h1>
+    <p class="subtitle is-5">Messages saved via the Telegram bot.</p>
+
+    <div id="entries-table"
+         hx-get="/pages/partials/entries-table"
+         hx-trigger="load, every 5s"
+         hx-swap="innerHTML"
+         aria-busy="true">
+      <progress class="progress is-small is-primary" max="100">Loading entries…</progress>
+    </div>
+
+    <div class="mt-5">
+      <a class="button is-light" href="/dashboard">← Back to Dashboard</a>
+    </div>
+  </div>
+</section>
+{% endblock %}
